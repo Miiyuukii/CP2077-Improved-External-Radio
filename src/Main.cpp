@@ -1,5 +1,78 @@
 #include <RED4ext/RED4ext.hpp>
 
+// Fetch audio devices on Windows.
+#include <iostream>
+#include <windows.h>
+#include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
+
+int GetAllDevices(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
+{
+    HRESULT hr = CoInitialize(NULL);
+    if (FAILED(hr))
+        return 1;
+
+    IMMDeviceEnumerator* pEnumerator = NULL;
+    IMMDeviceCollection* pCollection = NULL;
+
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                          (void**)&pEnumerator);
+
+    if (SUCCEEDED(hr))
+    {
+        // Enumerate active audio output (render) devices
+        hr = pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
+    }
+
+    if (SUCCEEDED(hr))
+    {
+        UINT count;
+        pCollection->GetCount(&count);
+
+        for (UINT i = 0; i < count; i++)
+        {
+            IMMDevice* pEndpoint = NULL;
+            hr = pCollection->Item(i, &pEndpoint);
+
+            if (SUCCEEDED(hr))
+            {
+                IPropertyStore* pProps = NULL;
+                hr = pEndpoint->OpenPropertyStore(STGM_READ, &pProps);
+
+                if (SUCCEEDED(hr))
+                {
+                    PROPVARIANT varName;
+                    PropVariantInit(&varName);
+
+                    // Get the friendly name of the audio device
+                    hr = pProps->GetValue(PKEY_Device_FriendlyName, &varName);
+                    if (SUCCEEDED(hr))
+                    {
+                        // log all devices
+                        std::wstring wname(varName.pwszVal);
+                        std::string narrowName(wname.begin(), wname.end());
+
+                        std::string name = std::format("Device {0}: {1}", i, narrowName);
+                        aSdk->logger->Info(aHandle, name.c_str());
+                    }
+
+                    PropVariantClear(&varName);
+                    pProps->Release();
+                }
+                pEndpoint->Release();
+            }
+        }
+        pCollection->Release();
+    }
+
+    if (pEnumerator)
+        pEnumerator->Release();
+    CoUninitialize();
+    return 0;
+}
+
+
+
 RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4ext::v1::EMainReason aReason,
                                         const RED4ext::v1::Sdk* aSdk)
 {
@@ -16,6 +89,15 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
          * Returning "true" in this function loads the plugin, returning "false" will unload it and "Main" will be
          * called with "Unload" reason.
          */
+
+        if (GetAllDevices(aHandle,aSdk) != 0)
+        {
+            // log errors
+            aSdk->logger->Error(aHandle, "Can't Initialize.");
+        }
+
+        aSdk->logger->Info(aHandle, "List of devices gathered.");
+
 
         break;
     }
@@ -70,3 +152,4 @@ RED4EXT_C_EXPORT uint32_t RED4EXT_CALL Supports()
      */
     return RED4EXT_API_VERSION_1;
 }
+
