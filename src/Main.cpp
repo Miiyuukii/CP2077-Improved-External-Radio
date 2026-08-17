@@ -1,18 +1,76 @@
 #include <RED4ext/RED4ext.hpp>
+#include <RED4ext/Containers/DynArray.hpp>
+#include <RED4ext/CString.hpp>
 
 // Fetch audio devices on Windows.
 #include <iostream>
 #include <windows.h>
 #include <mmdeviceapi.h>
+#include <endpointvolume.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <vector>
 #include <string>
+
+// Pause/Play functionality
+#pragma comment(lib, "runtimeobject.lib")
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Media.Control.h>
+#include <thread>
 
 static std::vector<std::string> devices = {};
 static std::vector<std::string> guids = {};
 
 static std::string currGuid = "";
-static BOOL isActive = false;
+static int32_t mode = 0; // 0 = pause when out of car, 1 = mute when out of car, 2 = don't do anything
+
+using namespace winrt::Windows::Media::Control;
+void PauseMediaAsync()
+{
+    std::thread(
+        []()
+        {
+            try
+            {
+                winrt::init_apartment(winrt::apartment_type::multi_threaded);
+
+                auto manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+                auto currentSession = manager.GetCurrentSession();
+
+                if (currentSession)
+                {
+                    currentSession.TryPauseAsync().get();
+                }
+            }
+            catch (...)
+            {
+                
+            }
+        })
+        .detach();
+}
+void ResumeMediaAsync()
+{
+    std::thread(
+        []()
+        {
+            try
+            {
+                winrt::init_apartment(winrt::apartment_type::multi_threaded);
+
+                auto manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+                auto currentSession = manager.GetCurrentSession();
+
+                if (currentSession)
+                {
+                    currentSession.TryPlayAsync().get();
+                }
+            }
+            catch (...)
+            {
+            }
+        })
+        .detach();
+}
 
 void GetDevicesList(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, std::vector<std::string>* aOut, int64_t a4)
 {
@@ -20,78 +78,16 @@ void GetDevicesList(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame
 
     if (aOut)
     {
-        *aOut = ::devices;
-    }
-}
-
-std::vector<std::string> ReloadDevice()
-{
-    std::vector<std::string> devicesList = {};
-
-    HRESULT hr = CoInitialize(NULL);
-    if (FAILED(hr))
-        return devicesList;
-
-    IMMDeviceEnumerator* pEnumerator = NULL;
-    IMMDeviceCollection* pCollection = NULL;
-
-    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
-                          (void**)&pEnumerator);
-
-    if (SUCCEEDED(hr))
-    {
-        // Enumerate active audio output (render) devices
-        hr = pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
-    }
-
-    if (SUCCEEDED(hr))
-    {
-        UINT count;
-        pCollection->GetCount(&count);
-
-        for (UINT i = 0; i < count; i++)
+        aOut->clear();
+        aOut->reserve(static_cast<uint32_t>(::devices.size()));
+        for (const auto& dev : ::devices)
         {
-            IMMDevice* pEndpoint = NULL;
-            hr = pCollection->Item(i, &pEndpoint);
-
-            if (SUCCEEDED(hr))
-            {
-                IPropertyStore* pProps = NULL;
-                hr = pEndpoint->OpenPropertyStore(STGM_READ, &pProps);
-
-                if (SUCCEEDED(hr))
-                {
-                    PROPVARIANT varName;
-                    PropVariantInit(&varName);
-
-                    // Get the friendly name of the audio device
-                    hr = pProps->GetValue(PKEY_Device_FriendlyName, &varName);
-                    if (SUCCEEDED(hr))
-                    {
-                        // log all devices
-                        std::wstring wname(varName.pwszVal);
-                        std::string narrowName(wname.begin(), wname.end());
-
-                        // std::string name = std::format("Device {0}: {1}", i, narrowName);
-                        devicesList.push_back(narrowName);
-                    }
-
-                    PropVariantClear(&varName);
-                    pProps->Release();
-                }
-                pEndpoint->Release();
-            }
+            aOut->push_back(dev.c_str());
         }
-        pCollection->Release();
     }
-
-    if (pEnumerator)
-        pEnumerator->Release();
-    CoUninitialize();
-    return devicesList;
 }
 
-std::string WideToUTF8(const wchar_t* wstr)
+static std::string WideToUTF8(const wchar_t* wstr)
 {
     if (!wstr)
         return "";
@@ -103,12 +99,23 @@ std::string WideToUTF8(const wchar_t* wstr)
     WideCharToMultiByte(CP_UTF8, 0, wstr, -1, &strTo[0], sizeNeeded, NULL, NULL);
     return strTo;
 }
-
-std::vector<std::string> ReloadDeviceGUID()
+static std::wstring UTF8ToWide(const std::string& str)
 {
-    std::vector<std::string> devicesList;
+    if (str.empty())
+        return L"";
+    int sizeNeeded = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, NULL, 0);
+    if (sizeNeeded <= 0)
+        return L"";
 
-    // Initialize COM cleanly for multithreaded/DLL execution
+    std::wstring wstr(sizeNeeded - 1, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &wstr[0], sizeNeeded);
+    return wstr;
+}
+static void ReloadDevicesInternal()
+{
+    ::devices.clear();
+    ::guids.clear();
+
     HRESULT hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     bool shouldUninit = SUCCEEDED(hrCo);
 
@@ -131,12 +138,39 @@ std::vector<std::string> ReloadDeviceGUID()
                 IMMDevice* pEndpoint = nullptr;
                 if (SUCCEEDED(pCollection->Item(i, &pEndpoint)) && pEndpoint)
                 {
+                    // 1. Get Endpoint ID String (GUID)
                     LPWSTR pwszID = nullptr;
-                    // GetId returns the WASAPI Endpoint ID string
+                    std::string deviceGuid = "";
                     if (SUCCEEDED(pEndpoint->GetId(&pwszID)) && pwszID)
                     {
-                        devicesList.push_back(WideToUTF8(pwszID));
-                        CoTaskMemFree(pwszID); // Free memory allocated by GetId
+                        deviceGuid = WideToUTF8(pwszID);
+                        CoTaskMemFree(pwszID);
+                    }
+
+                    // 2. Get Device Friendly Name
+                    std::string deviceName = "";
+                    IPropertyStore* pProps = nullptr;
+                    if (SUCCEEDED(pEndpoint->OpenPropertyStore(STGM_READ, &pProps)) && pProps)
+                    {
+                        PROPVARIANT varName;
+                        PropVariantInit(&varName);
+
+                        if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &varName)))
+                        {
+                            if (varName.vt == VT_LPWSTR && varName.pwszVal != nullptr)
+                            {
+                                deviceName = WideToUTF8(varName.pwszVal);
+                            }
+                        }
+                        PropVariantClear(&varName);
+                        pProps->Release();
+                    }
+
+                    // Store synchronized pair
+                    if (!deviceGuid.empty() && !deviceName.empty())
+                    {
+                        ::devices.push_back(deviceName);
+                        ::guids.push_back(deviceGuid);
                     }
 
                     pEndpoint->Release();
@@ -151,14 +185,12 @@ std::vector<std::string> ReloadDeviceGUID()
     {
         CoUninitialize();
     }
-
-    return devicesList;
 }
 
 void ReloadDevices(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
 {
-    ::devices = ReloadDevice();
-    ::guids = ReloadDeviceGUID();
+    aFrame->code++;
+    ReloadDevicesInternal();
 }
 
 void SetDeviceVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
@@ -168,12 +200,90 @@ void SetDeviceVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFram
     aFrame->code++;
 
     // Set target device volume (currGuid) and change it volume to match ingame radio.
-}
+    if (::currGuid.empty())
+        return;
 
+    if (newVolume < 0.0f)
+        newVolume = 0.0f;
+    if (newVolume > 1.0f)
+        newVolume = 1.0f;
+
+    HRESULT hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    bool shouldUninit = SUCCEEDED(hrCo);
+
+    IMMDeviceEnumerator* pEnumerator = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                  (void**)&pEnumerator);
+
+    if (SUCCEEDED(hr) && pEnumerator)
+    {
+        std::wstring wGuid = UTF8ToWide(::currGuid);
+        IMMDevice* pDevice = nullptr;
+
+        hr = pEnumerator->GetDevice(wGuid.c_str(), &pDevice);
+        if (SUCCEEDED(hr) && pDevice)
+        {
+            IAudioEndpointVolume* pEndpointVolume = nullptr;
+            hr = pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pEndpointVolume);
+
+            if (SUCCEEDED(hr) && pEndpointVolume)
+            {
+                pEndpointVolume->SetMasterVolumeLevelScalar(newVolume, NULL);
+                pEndpointVolume->Release();
+            }
+            pDevice->Release();
+        }
+        pEnumerator->Release();
+    }
+
+    if (shouldUninit)
+    {
+        CoUninitialize();
+    }
+}
 void SetDevice(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
 {
-    std::string newDevice;
+    RED4ext::CString newDevice;
     RED4ext::GetParameter(aFrame, &newDevice);
+
+    std::string targetName = newDevice.c_str();
+
+    for (size_t i = 0; i < ::devices.size(); ++i)
+    {
+        if (::devices[i] == targetName && i < ::guids.size())
+        {
+            ::currGuid = ::guids[i];
+            break;
+        }
+    }
+}
+
+void SetMode(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
+{
+    int newMode;
+    RED4ext::GetParameter(aFrame, &newMode);
+    aFrame->code++;
+
+    mode = newMode;
+}
+void GetMode(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, int32_t* aOut, int64_t a4) 
+{
+    aFrame->code++;
+    if (aOut)
+    {
+        *aOut = ::mode;
+    }
+}
+
+void PauseMedia(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
+{
+    // pause current media using
+    PauseMediaAsync();
+}
+void ResumeMedia(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
+{
+    // resume current media
+    ResumeMediaAsync();
 }
 
 struct ImpExRad : RED4ext::IScriptable
@@ -191,7 +301,6 @@ RED4EXT_C_EXPORT void RED4EXT_CALL RegisterTypes()
 {
     RED4ext::CRTTISystem::Get()->RegisterType(&customClass);
 }
-
 RED4EXT_C_EXPORT void RED4EXT_CALL PostRegisterTypes()
 {
     auto rtti = RED4ext::CRTTISystem::Get();
@@ -221,6 +330,28 @@ RED4EXT_C_EXPORT void RED4EXT_CALL PostRegisterTypes()
                                                       {.isNative = true});
     devsetfunc->AddParam("String", "newDevice");
     customClass.RegisterFunction(devsetfunc);
+
+    // Set Mode
+    auto setmodefunc =
+        RED4ext::CClassFunction::Create(&customClass, "SetMode", "SetMode", &SetMode, {.isNative = true});
+    setmodefunc->AddParam("Int32", "newMode");
+    customClass.RegisterFunction(setmodefunc);
+
+    // Get Mode
+    auto getmodefunc =
+        RED4ext::CClassFunction::Create(&customClass, "GetMode", "GetMode", &GetMode, {.isNative = true});
+    getmodefunc->SetReturnType("Int32");
+    customClass.RegisterFunction(getmodefunc);
+
+    // Pause Media
+    auto pausefunc =
+        RED4ext::CClassFunction::Create(&customClass, "PauseMedia", "PauseMedia", &PauseMedia, {.isNative = true});
+    customClass.RegisterFunction(pausefunc);
+
+    // Resume Media
+    auto resumefunc =
+        RED4ext::CClassFunction::Create(&customClass, "ResumeMedia", "ResumeMedia", &ResumeMedia, {.isNative = true});
+    customClass.RegisterFunction(resumefunc);
 }
 
 RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4ext::v1::EMainReason aReason,
@@ -237,7 +368,7 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 
         // aSdk->logger->Info(aHandle, "List of devices gathered.");
 
-        ::devices = ReloadDevice();
+        ReloadDevicesInternal();
 
         if (::devices.size() == 0)
         {
