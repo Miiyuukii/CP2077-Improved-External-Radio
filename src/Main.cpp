@@ -5,12 +5,32 @@
 #include <windows.h>
 #include <mmdeviceapi.h>
 #include <functiondiscoverykeys_devpkey.h>
+#include <vector>
+#include <string>
 
-int GetAllDevices(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
+static std::vector<std::string> devices = {};
+static std::vector<std::string> guids = {};
+
+static std::string currGuid = "";
+static BOOL isActive = false;
+
+void GetDevicesList(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, std::vector<std::string>* aOut, int64_t a4)
 {
+    aFrame->code++;
+
+    if (aOut)
+    {
+        *aOut = ::devices;
+    }
+}
+
+std::vector<std::string> ReloadDevice()
+{
+    std::vector<std::string> devicesList = {};
+
     HRESULT hr = CoInitialize(NULL);
     if (FAILED(hr))
-        return 1;
+        return devicesList;
 
     IMMDeviceEnumerator* pEnumerator = NULL;
     IMMDeviceCollection* pCollection = NULL;
@@ -52,8 +72,8 @@ int GetAllDevices(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSd
                         std::wstring wname(varName.pwszVal);
                         std::string narrowName(wname.begin(), wname.end());
 
-                        std::string name = std::format("Device {0}: {1}", i, narrowName);
-                        aSdk->logger->Info(aHandle, name.c_str());
+                        // std::string name = std::format("Device {0}: {1}", i, narrowName);
+                        devicesList.push_back(narrowName);
                     }
 
                     PropVariantClear(&varName);
@@ -68,10 +88,140 @@ int GetAllDevices(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSd
     if (pEnumerator)
         pEnumerator->Release();
     CoUninitialize();
-    return 0;
+    return devicesList;
 }
 
+std::string WideToUTF8(const wchar_t* wstr)
+{
+    if (!wstr)
+        return "";
+    int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, NULL, 0, NULL, NULL);
+    if (sizeNeeded <= 0)
+        return "";
 
+    std::string strTo(sizeNeeded - 1, 0); // Exclude null terminator from std::string length
+    WideCharToMultiByte(CP_UTF8, 0, wstr, -1, &strTo[0], sizeNeeded, NULL, NULL);
+    return strTo;
+}
+
+std::vector<std::string> ReloadDeviceGUID()
+{
+    std::vector<std::string> devicesList;
+
+    // Initialize COM cleanly for multithreaded/DLL execution
+    HRESULT hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    bool shouldUninit = SUCCEEDED(hrCo);
+
+    IMMDeviceEnumerator* pEnumerator = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                  (void**)&pEnumerator);
+
+    if (SUCCEEDED(hr) && pEnumerator)
+    {
+        IMMDeviceCollection* pCollection = nullptr;
+        hr = pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
+
+        if (SUCCEEDED(hr) && pCollection)
+        {
+            UINT count = 0;
+            pCollection->GetCount(&count);
+
+            for (UINT i = 0; i < count; i++)
+            {
+                IMMDevice* pEndpoint = nullptr;
+                if (SUCCEEDED(pCollection->Item(i, &pEndpoint)) && pEndpoint)
+                {
+                    LPWSTR pwszID = nullptr;
+                    // GetId returns the WASAPI Endpoint ID string
+                    if (SUCCEEDED(pEndpoint->GetId(&pwszID)) && pwszID)
+                    {
+                        devicesList.push_back(WideToUTF8(pwszID));
+                        CoTaskMemFree(pwszID); // Free memory allocated by GetId
+                    }
+
+                    pEndpoint->Release();
+                }
+            }
+            pCollection->Release();
+        }
+        pEnumerator->Release();
+    }
+
+    if (shouldUninit)
+    {
+        CoUninitialize();
+    }
+
+    return devicesList;
+}
+
+void ReloadDevices(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
+{
+    ::devices = ReloadDevice();
+    ::guids = ReloadDeviceGUID();
+}
+
+void SetDeviceVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
+{
+    float newVolume;
+    RED4ext::GetParameter(aFrame, &newVolume);
+    aFrame->code++;
+
+    // Set target device volume (currGuid) and change it volume to match ingame radio.
+}
+
+void SetDevice(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
+{
+    std::string newDevice;
+    RED4ext::GetParameter(aFrame, &newDevice);
+}
+
+struct ImpExRad : RED4ext::IScriptable
+{
+    RED4ext::CClass* GetNativeType();
+};
+
+RED4ext::TTypedClass<ImpExRad> customClass("ImpExRad");
+RED4ext::CClass* ImpExRad::GetNativeType()
+{
+    return &customClass;
+}
+
+RED4EXT_C_EXPORT void RED4EXT_CALL RegisterTypes()
+{
+    RED4ext::CRTTISystem::Get()->RegisterType(&customClass);
+}
+
+RED4EXT_C_EXPORT void RED4EXT_CALL PostRegisterTypes()
+{
+    auto rtti = RED4ext::CRTTISystem::Get();
+    auto scriptable = rtti->GetClass("IScriptable");
+    customClass.parent = scriptable;
+
+    // Set device volume function
+    auto volfunc = RED4ext::CClassFunction::Create(&customClass, "SetDeviceVolume", "SetDeviceVolume", &SetDeviceVolume,
+                                                {.isNative = true});
+    volfunc->AddParam("Float", "newVolume");
+    customClass.RegisterFunction(volfunc);
+
+    // Reload device function
+    auto relfunc = RED4ext::CClassFunction::Create(&customClass, "ReloadDevice", "ReloadDevice", &ReloadDevices,
+                                                {.isNative = true});
+    customClass.RegisterFunction(relfunc);
+
+    // Devices Getter
+    auto devgetfunc = RED4ext::CClassFunction::Create(&customClass, "GetDevicesList", "GetDevicesList", &GetDevicesList,
+                                                      {.isNative = true});
+    devgetfunc->SetReturnType("array:String");
+    customClass.RegisterFunction(devgetfunc);
+
+    // Device Setter
+    auto devsetfunc =
+        RED4ext::CClassFunction::Create(&customClass, "SetDevice", "SetDevice", &SetDevice,
+                                                      {.isNative = true});
+    devsetfunc->AddParam("String", "newDevice");
+    customClass.RegisterFunction(devsetfunc);
+}
 
 RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4ext::v1::EMainReason aReason,
                                         const RED4ext::v1::Sdk* aSdk)
@@ -80,61 +230,33 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
     {
     case RED4ext::v1::EMainReason::Load:
     {
-        /*
-         * Here you can register your custom functions, initalize variable, create hooks and so on.
-         *
-         * Be sure to store the plugin handle and the interface because you cannot get it again later. The plugin handle
-         * is what identify your plugin through the extender.
-         *
-         * Returning "true" in this function loads the plugin, returning "false" will unload it and "Main" will be
-         * called with "Unload" reason.
-         */
+        auto rtti = RED4ext::CRTTISystem::Get();
 
-        if (GetAllDevices(aHandle,aSdk) != 0)
+        rtti->AddRegisterCallback(RegisterTypes);
+        rtti->AddPostRegisterCallback(PostRegisterTypes);
+
+        // aSdk->logger->Info(aHandle, "List of devices gathered.");
+
+        ::devices = ReloadDevice();
+
+        if (::devices.size() == 0)
         {
-            // log errors
-            aSdk->logger->Error(aHandle, "Can't Initialize.");
+            aSdk->logger->Error(aHandle, "Can't get devices.");
         }
-
-        aSdk->logger->Info(aHandle, "List of devices gathered.");
-
 
         break;
     }
     case RED4ext::v1::EMainReason::Unload:
     {
-        /*
-         * Here you can free resources you allocated during initalization or during the time your plugin was executed.
-         */
         break;
     }
     }
-
-    /*
-     * For more information about this function see https://docs.red4ext.com/mod-developers/creating-a-plugin#main.
-     */
 
     return true;
 }
 
 RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
-    /*
-     * This function supply the necessary information about your plugin, like name, version, support runtime and SDK. DO
-     * NOT do anything here yet!
-     *
-     * You MUST have this function!
-     *
-     * Make sure to fill all of the fields here in order to load your plugin correctly.
-     *
-     * Runtime version is the game's version, it is best to let it set to "RED4EXT_RUNTIME_LATEST" if you want to target
-     * the latest game's version that the SDK defined, if the runtime version specified here and the game's version do
-     * not match, your plugin will not be loaded. If you want to use RED4ext only as a loader and you do not care about
-     * game's version use "RED4EXT_RUNTIME_INDEPENDENT".
-     *
-     * For more information about this function see https://docs.red4ext.com/mod-developers/creating-a-plugin#query.
-     */
-
     aInfo->name = L"CP2077.Improved.External.Radio";
     aInfo->author = L"unstblr, GALAXIATHE1";
     aInfo->version = RED4EXT_V1_SEMVER(1, 0, 0);
@@ -144,12 +266,6 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 
 RED4EXT_C_EXPORT uint32_t RED4EXT_CALL Supports()
 {
-    /*
-     * This functions returns only what API version is support by your plugins.
-     * You MUST have this function!
-     *
-     * For more information about this function see https://docs.red4ext.com/mod-developers/creating-a-plugin#supports.
-     */
     return RED4EXT_API_VERSION_1;
 }
 
