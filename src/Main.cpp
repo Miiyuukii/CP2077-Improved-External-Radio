@@ -3,13 +3,10 @@
 #include <RED4ext/CString.hpp>
 
 // Fetch audio devices on Windows.
-#include <iostream>
 #include <windows.h>
 #include <mmdeviceapi.h>
+#include <audiopolicy.h>
 #include <endpointvolume.h>
-#include <functiondiscoverykeys_devpkey.h>
-#include <vector>
-#include <string>
 
 // Pause/Play functionality
 #pragma comment(lib, "runtimeobject.lib")
@@ -17,11 +14,10 @@
 #include <winrt/Windows.Media.Control.h>
 #include <thread>
 
-static std::vector<std::string> devices = {};
-static std::vector<std::string> guids = {};
-
-static std::string currGuid = "";
 static int32_t mode = 0; // 0 = pause when out of car, 1 = mute when out of car, 2 = don't do anything
+
+static RED4ext::v1::PluginHandle g_pluginHandle = nullptr;
+static const RED4ext::v1::Sdk* g_sdk = nullptr;
 
 using namespace winrt::Windows::Media::Control;
 void PauseMediaAsync()
@@ -72,113 +68,76 @@ void ResumeMediaAsync()
         .detach();
 }
 
-void GetDevicesList(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, std::vector<std::string>* aOut, int64_t a4)
+static void SetCurrentSessionVolumeInternal(float volumeLevel)
 {
-    aFrame->code++;
-
-    if (aOut)
-    {
-        aOut->clear();
-        aOut->reserve(static_cast<uint32_t>(::devices.size()));
-        for (const auto& dev : ::devices)
-        {
-            aOut->push_back(dev.c_str());
-        }
-    }
-}
-
-static std::string WideToUTF8(const wchar_t* wstr)
-{
-    if (!wstr)
-        return "";
-    int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, NULL, 0, NULL, NULL);
-    if (sizeNeeded <= 0)
-        return "";
-
-    std::string strTo(sizeNeeded - 1, 0); // Exclude null terminator from std::string length
-    WideCharToMultiByte(CP_UTF8, 0, wstr, -1, &strTo[0], sizeNeeded, NULL, NULL);
-    return strTo;
-}
-static std::wstring UTF8ToWide(const std::string& str)
-{
-    if (str.empty())
-        return L"";
-    int sizeNeeded = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, NULL, 0);
-    if (sizeNeeded <= 0)
-        return L"";
-
-    std::wstring wstr(sizeNeeded - 1, 0);
-    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &wstr[0], sizeNeeded);
-    return wstr;
-}
-static void ReloadDevicesInternal()
-{
-    ::devices.clear();
-    ::guids.clear();
-
     HRESULT hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     bool shouldUninit = SUCCEEDED(hrCo);
 
-    IMMDeviceEnumerator* pEnumerator = nullptr;
-    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
-                                  (void**)&pEnumerator);
-
-    if (SUCCEEDED(hr) && pEnumerator)
+    try
     {
-        IMMDeviceCollection* pCollection = nullptr;
-        hr = pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
 
-        if (SUCCEEDED(hr) && pCollection)
+        auto manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+        auto currentSession = manager.GetCurrentSession();
+
+        if (!currentSession)
         {
-            UINT count = 0;
-            pCollection->GetCount(&count);
+            if (shouldUninit)
+                CoUninitialize();
+            return;
+        }
 
-            for (UINT i = 0; i < count; i++)
+        // Clamp volume level (0.0 to 1.0)
+        float clampedVol = (volumeLevel < 0.0f) ? 0.0f : ((volumeLevel > 1.0f) ? 1.0f : volumeLevel);
+
+        // Enumerate active audio sessions in WASAPI
+        IMMDeviceEnumerator* pEnumerator = nullptr;
+        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                       (void**)&pEnumerator)) &&
+            pEnumerator)
+        {
+            IMMDevice* pDevice = nullptr;
+            if (SUCCEEDED(pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice)) && pDevice)
             {
-                IMMDevice* pEndpoint = nullptr;
-                if (SUCCEEDED(pCollection->Item(i, &pEndpoint)) && pEndpoint)
+                IAudioSessionManager2* pSessionManager = nullptr;
+                if (SUCCEEDED(pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, NULL,
+                                                (void**)&pSessionManager)) &&
+                    pSessionManager)
                 {
-                    // 1. Get Endpoint ID String (GUID)
-                    LPWSTR pwszID = nullptr;
-                    std::string deviceGuid = "";
-                    if (SUCCEEDED(pEndpoint->GetId(&pwszID)) && pwszID)
+                    IAudioSessionEnumerator* pSessionEnumerator = nullptr;
+                    if (SUCCEEDED(pSessionManager->GetSessionEnumerator(&pSessionEnumerator)) && pSessionEnumerator)
                     {
-                        deviceGuid = WideToUTF8(pwszID);
-                        CoTaskMemFree(pwszID);
-                    }
+                        int count = 0;
+                        pSessionEnumerator->GetCount(&count);
 
-                    // 2. Get Device Friendly Name
-                    std::string deviceName = "";
-                    IPropertyStore* pProps = nullptr;
-                    if (SUCCEEDED(pEndpoint->OpenPropertyStore(STGM_READ, &pProps)) && pProps)
-                    {
-                        PROPVARIANT varName;
-                        PropVariantInit(&varName);
-
-                        if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &varName)))
+                        // Loop through sessions and apply volume to non-system active media sessions
+                        for (int i = 0; i < count; i++)
                         {
-                            if (varName.vt == VT_LPWSTR && varName.pwszVal != nullptr)
+                            IAudioSessionControl* pControl = nullptr;
+                            if (SUCCEEDED(pSessionEnumerator->GetSession(i, &pControl)) && pControl)
                             {
-                                deviceName = WideToUTF8(varName.pwszVal);
+                                ISimpleAudioVolume* pVolume = nullptr;
+                                if (SUCCEEDED(
+                                        pControl->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&pVolume)) &&
+                                    pVolume)
+                                {
+                                    pVolume->SetMasterVolume(clampedVol, NULL);
+                                    pVolume->Release();
+                                }
+                                pControl->Release();
                             }
                         }
-                        PropVariantClear(&varName);
-                        pProps->Release();
+                        pSessionEnumerator->Release();
                     }
-
-                    // Store synchronized pair
-                    if (!deviceGuid.empty() && !deviceName.empty())
-                    {
-                        ::devices.push_back(deviceName);
-                        ::guids.push_back(deviceGuid);
-                    }
-
-                    pEndpoint->Release();
+                    pSessionManager->Release();
                 }
+                pDevice->Release();
             }
-            pCollection->Release();
+            pEnumerator->Release();
         }
-        pEnumerator->Release();
+    }
+    catch (...)
+    {
     }
 
     if (shouldUninit)
@@ -187,75 +146,23 @@ static void ReloadDevicesInternal()
     }
 }
 
-void ReloadDevices(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
+void SetCurrentMediaVolumeAsync(float volumeLevel)
 {
-    aFrame->code++;
-    ReloadDevicesInternal();
+    std::thread([volumeLevel]() { SetCurrentSessionVolumeInternal(volumeLevel); }).detach();
 }
 
-void SetDeviceVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
+void SetMediaVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
 {
     float newVolume;
     RED4ext::GetParameter(aFrame, &newVolume);
     aFrame->code++;
 
-    // Set target device volume (currGuid) and change it volume to match ingame radio.
-    if (::currGuid.empty())
-        return;
-
-    if (newVolume < 0.0f)
-        newVolume = 0.0f;
-    if (newVolume > 1.0f)
-        newVolume = 1.0f;
-
-    HRESULT hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-    bool shouldUninit = SUCCEEDED(hrCo);
-
-    IMMDeviceEnumerator* pEnumerator = nullptr;
-    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
-                                  (void**)&pEnumerator);
-
-    if (SUCCEEDED(hr) && pEnumerator)
+    if (g_sdk && g_pluginHandle)
     {
-        std::wstring wGuid = UTF8ToWide(::currGuid);
-        IMMDevice* pDevice = nullptr;
-
-        hr = pEnumerator->GetDevice(wGuid.c_str(), &pDevice);
-        if (SUCCEEDED(hr) && pDevice)
-        {
-            IAudioEndpointVolume* pEndpointVolume = nullptr;
-            hr = pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pEndpointVolume);
-
-            if (SUCCEEDED(hr) && pEndpointVolume)
-            {
-                pEndpointVolume->SetMasterVolumeLevelScalar(newVolume, NULL);
-                pEndpointVolume->Release();
-            }
-            pDevice->Release();
-        }
-        pEnumerator->Release();
+        g_sdk->logger->InfoF(g_pluginHandle, "Setting current media session volume to: %.2f", newVolume);
     }
 
-    if (shouldUninit)
-    {
-        CoUninitialize();
-    }
-}
-void SetDevice(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
-{
-    RED4ext::CString newDevice;
-    RED4ext::GetParameter(aFrame, &newDevice);
-
-    std::string targetName = newDevice.c_str();
-
-    for (size_t i = 0; i < ::devices.size(); ++i)
-    {
-        if (::devices[i] == targetName && i < ::guids.size())
-        {
-            ::currGuid = ::guids[i];
-            break;
-        }
-    }
+    SetCurrentMediaVolumeAsync(newVolume);
 }
 
 void SetMode(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
@@ -278,11 +185,13 @@ void GetMode(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, int32
 void PauseMedia(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
 {
     // pause current media using
+    aFrame->code++;
     PauseMediaAsync();
 }
 void ResumeMedia(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
 {
     // resume current media
+    aFrame->code++;
     ResumeMediaAsync();
 }
 
@@ -307,29 +216,11 @@ RED4EXT_C_EXPORT void RED4EXT_CALL PostRegisterTypes()
     auto scriptable = rtti->GetClass("IScriptable");
     customClass.parent = scriptable;
 
-    // Set device volume function
-    auto volfunc = RED4ext::CClassFunction::Create(&customClass, "SetDeviceVolume", "SetDeviceVolume", &SetDeviceVolume,
-                                                {.isNative = true});
-    volfunc->AddParam("Float", "newVolume");
-    customClass.RegisterFunction(volfunc);
-
-    // Reload device function
-    auto relfunc = RED4ext::CClassFunction::Create(&customClass, "ReloadDevice", "ReloadDevice", &ReloadDevices,
-                                                {.isNative = true});
-    customClass.RegisterFunction(relfunc);
-
-    // Devices Getter
-    auto devgetfunc = RED4ext::CClassFunction::Create(&customClass, "GetDevicesList", "GetDevicesList", &GetDevicesList,
+    // Set Current Media Volume (0.0f to 1.0f)
+    auto setvolfunc = RED4ext::CClassFunction::Create(&customClass, "SetMediaVolume", "SetMediaVolume", &SetMediaVolume,
                                                       {.isNative = true});
-    devgetfunc->SetReturnType("array:String");
-    customClass.RegisterFunction(devgetfunc);
-
-    // Device Setter
-    auto devsetfunc =
-        RED4ext::CClassFunction::Create(&customClass, "SetDevice", "SetDevice", &SetDevice,
-                                                      {.isNative = true});
-    devsetfunc->AddParam("String", "newDevice");
-    customClass.RegisterFunction(devsetfunc);
+    setvolfunc->AddParam("Float", "newVolume");
+    customClass.RegisterFunction(setvolfunc);
 
     // Set Mode
     auto setmodefunc =
@@ -362,18 +253,13 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
     case RED4ext::v1::EMainReason::Load:
     {
         auto rtti = RED4ext::CRTTISystem::Get();
+        g_pluginHandle = aHandle;
+        g_sdk = aSdk;
 
         rtti->AddRegisterCallback(RegisterTypes);
         rtti->AddPostRegisterCallback(PostRegisterTypes);
 
-        // aSdk->logger->Info(aHandle, "List of devices gathered.");
-
-        ReloadDevicesInternal();
-
-        if (::devices.size() == 0)
-        {
-            aSdk->logger->Error(aHandle, "Can't get devices.");
-        }
+        g_sdk->logger->Info(g_pluginHandle, "Loaded successfully!");
 
         break;
     }
