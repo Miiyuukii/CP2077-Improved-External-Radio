@@ -76,8 +76,8 @@ registerForEvent("onInit", function()
 
     nativeSettings.addSubcategory("/ImpExRad/App", "App Settings")
     local apps = {}
-    local initialMode = mod.bridge:GetAppIndex() or 0
-    local currentAppIndex = math.min(math.max(initialMode + 1, 1), #apps)
+    local initialApp = mod.bridge:GetAppIndex() or 0
+    local currentAppIndex = math.min(math.max(initialApp + 1, 1), #apps)
     nativeSettings.addSelectorString(
         "/ImpExRad/App",
         "Applications",

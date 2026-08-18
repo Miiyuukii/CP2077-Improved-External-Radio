@@ -273,11 +273,6 @@ void SetDevice(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, voi
     }
 }
 
-//
-// FIX THIS SO IT CAN TARGET OTHER AUDIO DEVICE INSTEAD OF THE MAIN ONE
-// FUNCTIONAL JUST WRONG DEVICE
-// (IT TARGET THE APPLICATION ON THE SAME DEVICE NOT OTHER)
-//
 static void SetCurrentSessionVolumeInternal(float volumeLevel)
 {
     HRESULT hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
