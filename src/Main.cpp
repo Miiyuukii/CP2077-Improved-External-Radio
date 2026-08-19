@@ -95,8 +95,6 @@ void ResumeMediaAsync()
 void GetDevicesList(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame,
                     RED4ext::DynArray<RED4ext::CString>* aOut, int64_t a4)
 {
-    aFrame->code++;
-
     if (aOut)
     {
         aOut->Clear();
@@ -214,13 +212,13 @@ static void ReloadDevicesInternal()
 
 void ReloadDevices(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
 {
-    aFrame->code++;
     ReloadDevicesInternal();
 }
 void SetDevice(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
 {
     RED4ext::CString newDevice;
     RED4ext::GetParameter(aFrame, &newDevice);
+    aFrame->code++;
 
     std::string targetName = newDevice.c_str();
 
@@ -234,7 +232,6 @@ void SetDevice(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, voi
     }
 }
 
-// Helper to retrieve the executable filename (e.g. "spotify.exe") from a process ID
 static std::string GetProcessNameFromPID(DWORD pid)
 {
     if (pid == 0)
@@ -259,7 +256,6 @@ static std::string GetProcessNameFromPID(DWORD pid)
     CloseHandle(hProcess);
     return processName;
 }
-// Case-insensitive string comparison helper
 static bool EqualsIgnoreCase(const std::string& a, const std::string& b)
 {
     if (a.size() != b.size())
@@ -271,6 +267,7 @@ static bool EqualsIgnoreCase(const std::string& a, const std::string& b)
 static void SetCurrentSessionVolumeInternal(float volumeLevel)
 {
     float clampedVol = (volumeLevel < 0.0f) ? 0.0f : ((volumeLevel > 1.0f) ? 1.0f : volumeLevel);
+    bool isMuteRequested = (clampedVol <= 0.001f);
 
     try
     {
@@ -309,11 +306,18 @@ static void SetCurrentSessionVolumeInternal(float volumeLevel)
                             pSessionEnumerator->GetCount(&count);
 
                             std::string targetApp = "";
+                            std::string targetAppBase = "";
                             bool filterApp =
                                 useAppName && (appIndex >= 0 && appIndex < static_cast<int32_t>(apps.size()));
                             if (filterApp)
                             {
                                 targetApp = apps[appIndex];
+                                targetAppBase = targetApp;
+                                size_t exePos = targetAppBase.find(".exe");
+                                if (exePos != std::string::npos)
+                                {
+                                    targetAppBase = targetAppBase.substr(0, exePos);
+                                }
                             }
 
                             for (int i = 0; i < count; i++)
@@ -338,7 +342,7 @@ static void SetCurrentSessionVolumeInternal(float volumeLevel)
                                             std::string procName = GetProcessNameFromPID(pid);
 
                                             if (!procName.empty() && (EqualsIgnoreCase(procName, targetApp) ||
-                                                                      procName.find(targetApp) != std::string::npos))
+                                                                      procName.find(targetAppBase) != std::string::npos))
                                             {
                                                 shouldApplyVolume = true;
                                             }
@@ -351,8 +355,8 @@ static void SetCurrentSessionVolumeInternal(float volumeLevel)
                                                     std::string dispName = WideToUTF8(pwszDisplayName);
                                                     CoTaskMemFree(pwszDisplayName);
 
-                                                    if (EqualsIgnoreCase(dispName, targetApp) ||
-                                                        dispName.find(targetApp) != std::string::npos)
+                                                    if (!dispName.empty() && (EqualsIgnoreCase(dispName, targetApp) ||
+                                                        dispName.find(targetApp) != std::string::npos))
                                                     {
                                                         shouldApplyVolume = true;
                                                     }
@@ -371,6 +375,7 @@ static void SetCurrentSessionVolumeInternal(float volumeLevel)
                                             pVolume)
                                         {
                                             pVolume->SetMasterVolume(clampedVol, NULL);
+                                            pVolume->SetMute(isMuteRequested ? TRUE : FALSE, NULL);
                                             pVolume->Release();
                                         }
                                     }
@@ -425,7 +430,6 @@ void SetMode(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void*
 }
 void GetMode(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, int32_t* aOut, int64_t a4) 
 {
-    aFrame->code++;
     if (aOut)
     {
         *aOut = ::mode;
@@ -435,13 +439,11 @@ void GetMode(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, int32
 void PauseMedia(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
 {
     // pause current media using
-    aFrame->code++;
     PauseMediaAsync();
 }
 void ResumeMedia(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
 {
     // resume current media
-    aFrame->code++;
     ResumeMediaAsync();
 }
 
@@ -465,7 +467,6 @@ void SetUseApp(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, voi
 
 void GetAppIndex(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, int32_t* aOut, int64_t a4)
 {
-    aFrame->code++;
     if (aOut)
     {
         *aOut = ::appIndex;
@@ -482,7 +483,6 @@ void SetAppIndex(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, v
 
 void GetVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, float* aOut, int64_t a4)
 {
-    aFrame->code++;
     if (aOut)
     {
         *aOut = ::volume;

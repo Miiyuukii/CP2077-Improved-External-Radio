@@ -68,7 +68,7 @@ registerForEvent("onInit", function()
         end
     )
 
-    nativeSettings.addSubcategory("/ImpExRad/App", "App Settings")
+    nativeSettings.addSubcategory("/ImpExRad/App", "App Options")
     local apps = {
         [1] = "Spotify",
         [2] = "Google Chrome",
@@ -104,8 +104,8 @@ registerForEvent("onInit", function()
         "Applications",
         "Choose which applications will be affected by behavior.",
         apps,
-        1,               -- Default index
-        currentAppIndex, -- Initial active index
+        1,               
+        currentAppIndex, 
         function(idx)
             local targetIdx = currentAppIndex
             if type(idx) == "number" then
@@ -129,7 +129,6 @@ registerForEvent("onInit", function()
         [3] = "Disabled (Do Nothing)"
     }
 
-    -- Convert 0-based C++ enum/index to 1-based Lua index
     local initialMode = mod.bridge:GetMode() or 0
     local currentModeIndex = math.min(math.max(initialMode + 1, 1), #modes)
 
@@ -138,8 +137,8 @@ registerForEvent("onInit", function()
         "Behavior Mode",
         "Choose how external audio behaves when exiting or entering a vehicle.",
         modes,
-        1,                -- Default index
-        currentModeIndex, -- Initial active index
+        1,                
+        currentModeIndex, 
         function(idx)
             local modeValue = (type(idx) == "number" and idx or currentModeIndex) - 1
             mod.bridge:SetMode(modeValue)
