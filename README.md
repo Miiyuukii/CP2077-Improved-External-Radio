@@ -46,7 +46,7 @@ You can choose whether it behaves.
 ![native ui setting menu_app](images/modSettingAppCut.png)
 
 # Requirements
-Only supported Windows (10/11)
+Only supported Windows (10/11) [I'm not sure about Windows 11 but, should be working mostly]
 
 Latest version of Cyberpunk 2077 (DLC not required)
 
