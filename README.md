@@ -52,9 +52,8 @@ Latest version of Cyberpunk 2077 (DLC not required)
 
 # Installation
 1. Install [redscript](https://www.nexusmods.com/cyberpunk2077/mods/1511), [RED4ext](https://www.nexusmods.com/cyberpunk2077/mods/2380), [Cyber Engine Tweaks](https://www.nexusmods.com/cyberpunk2077/mods/107), [Native Setting UI](https://www.nexusmods.com/cyberpunk2077/mods/3518).
-2. Use [cybercmd](https://www.nexusmods.com/cyberpunk2077/mods/5176) if you're using redmod.
-3. Unzip the file into your game directory or use Vortex to install.
-4. Configure it in Native Setting UI.
+2. Unzip the file into your game directory or use Vortex to install.
+3. Configure it in Native Setting UI.
 
 # Compatibility
 Not compatible with [DrJackieBright's CP77-External-Radio-red4ext](https://github.com/DrJackieBright/CP77-External-Radio-red4ext/) as I'm using his configuration.
