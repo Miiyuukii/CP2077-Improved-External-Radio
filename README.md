@@ -17,7 +17,7 @@ You can control the volume of specific devices and/or application with in-game r
 
 ![native ui setting_menu_device](images/modSettingDevCut.png)
 
-[in-game radio menu](images/radioCut.png)
+![in-game radio menu](images/radioCut.png)
 
 ## Pause/Mute Behavior
 You can choose whether it behave like the old radio or the new one.
