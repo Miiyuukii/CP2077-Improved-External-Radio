@@ -71,3 +71,6 @@ Make sure to update Visual C++ Redistributable on your system. [Link here](https
 
 # License
 See [License](https://github.com/Miiyuukii/CP2077.Improved.External.Radio/blob/master/LICENSE.md) tab for more information.
+
+# AI Notices
+I've used AI to help with coding, debugging process. Mostly on C++ side of things.

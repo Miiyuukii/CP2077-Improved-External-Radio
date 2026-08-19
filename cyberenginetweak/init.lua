@@ -104,8 +104,8 @@ registerForEvent("onInit", function()
         "Applications",
         "Choose which applications will be affected by behavior.",
         apps,
-        1,               
-        currentAppIndex, 
+        1,
+        currentAppIndex,
         function(idx)
             local targetIdx = currentAppIndex
             if type(idx) == "number" then
@@ -118,6 +118,7 @@ registerForEvent("onInit", function()
                     end
                 end
             end
+            mod.bridge:SetAppIndex(targetIdx - 1)
         end
     )
 
@@ -137,8 +138,8 @@ registerForEvent("onInit", function()
         "Behavior Mode",
         "Choose how external audio behaves when exiting or entering a vehicle.",
         modes,
-        1,                
-        currentModeIndex, 
+        1,
+        currentModeIndex,
         function(idx)
             local modeValue = (type(idx) == "number" and idx or currentModeIndex) - 1
             mod.bridge:SetMode(modeValue)

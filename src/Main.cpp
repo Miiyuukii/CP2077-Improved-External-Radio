@@ -336,18 +336,31 @@ static void SetCurrentSessionVolumeInternal(float volumeLevel)
                                                                                (void**)&pControl2)) &&
                                             pControl2)
                                         {
+                                            // g_sdk->logger->InfoF(g_pluginHandle, "Check application.");
+
                                             DWORD pid = 0;
                                             pControl2->GetProcessId(&pid);
 
                                             std::string procName = GetProcessNameFromPID(pid);
 
+                                            if (g_sdk && g_pluginHandle)
+                                            {
+                                                std::string result = procName + ": ID" + std::to_string(pid);
+                                                // g_sdk->logger->InfoF(g_pluginHandle, targetApp.c_str());
+                                                // g_sdk->logger->InfoF(g_pluginHandle, targetAppBase.c_str());
+                                                // g_sdk->logger->InfoF(g_pluginHandle, result.c_str());
+                                            }
+
                                             if (!procName.empty() && (EqualsIgnoreCase(procName, targetApp) ||
                                                                       procName.find(targetAppBase) != std::string::npos))
                                             {
+                                                // g_sdk->logger->InfoF(g_pluginHandle, "Found application.");
                                                 shouldApplyVolume = true;
                                             }
                                             else
                                             {
+                                                // g_sdk->logger->InfoF(g_pluginHandle, "Application not found. Match display name..");
+
                                                 LPWSTR pwszDisplayName = nullptr;
                                                 if (SUCCEEDED(pControl2->GetDisplayName(&pwszDisplayName)) &&
                                                     pwszDisplayName)
@@ -358,6 +371,7 @@ static void SetCurrentSessionVolumeInternal(float volumeLevel)
                                                     if (!dispName.empty() && (EqualsIgnoreCase(dispName, targetApp) ||
                                                         dispName.find(targetApp) != std::string::npos))
                                                     {
+                                                        // g_sdk->logger->InfoF(g_pluginHandle, "Found application.");
                                                         shouldApplyVolume = true;
                                                     }
                                                 }
@@ -374,6 +388,7 @@ static void SetCurrentSessionVolumeInternal(float volumeLevel)
                                                                                (void**)&pVolume)) &&
                                             pVolume)
                                         {
+                                            // g_sdk->logger->InfoF(g_pluginHandle, "Apply volume.");
                                             pVolume->SetMasterVolume(clampedVol, NULL);
                                             pVolume->SetMute(isMuteRequested ? TRUE : FALSE, NULL);
                                             pVolume->Release();
@@ -414,8 +429,8 @@ void SetMediaVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame
 
     if (g_sdk && g_pluginHandle)
     {
-        g_sdk->logger->InfoF(g_pluginHandle, "Setting current media session volume to: %.2f", newVolume);
-        g_sdk->logger->InfoF(g_pluginHandle, "Current media session volume is %.2f", ::volume);
+        // g_sdk->logger->InfoF(g_pluginHandle, "Setting current media session volume to: %.2f", newVolume);
+        // g_sdk->logger->InfoF(g_pluginHandle, "Current media session volume is %.2f", ::volume);
     }
 
     SetCurrentMediaVolumeAsync(newVolume);
@@ -600,7 +615,7 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
         rtti->AddRegisterCallback(RegisterTypes);
         rtti->AddPostRegisterCallback(PostRegisterTypes);
 
-        g_sdk->logger->Info(g_pluginHandle, "Loaded successfully!");
+        // g_sdk->logger->Info(g_pluginHandle, "Loaded successfully!");
 
         ReloadDevicesInternal();
 
