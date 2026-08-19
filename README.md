@@ -6,16 +6,18 @@ This mod is basically DrJackieBright's mod with more features.
 ## How this work
 This mod can control current media that's playing and control its volume via "Window Volume Mixer" in other devices or current one.
 
-[picture here (volume mixer)]
+![volume mixer](images/volMixerUncut.png)
 
-[picture here (media pause/play)]
+![media pause/play](images/mediaCut.png)
 
 # Features
 
 ## Volume Control
 You can control the volume of specific devices and/or application with in-game radio volume.
 
-[picture here (in-game radio menu)]
+![native ui setting_menu_device](images/modSettingDevCut.png)
+
+[in-game radio menu](images/radioCut.png)
 
 ## Pause/Mute Behavior
 You can choose whether it behave like the old radio or the new one.
@@ -23,7 +25,7 @@ You can choose whether it behave like the old radio or the new one.
 - Mute on unmount from vehicles.
 - Do nothing
 
-[picture here (native ui setting menu)]
+![native ui setting menu_pause_mute](images/modSettingBehCut.png)
 
 ## Supported Applications (Not working.)
 - Spotify
@@ -41,7 +43,7 @@ You can choose whether it behave like the old radio or the new one.
 - Brave
 - Discord
 
-[picture here (native ui setting menu)]
+![native ui setting menu_app](images/modSettingAppCut.png)
 
 # Requirements
 Latest version of Cyberpunk 2077 (DLC not required)
