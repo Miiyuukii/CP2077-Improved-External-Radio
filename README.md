@@ -1,5 +1,5 @@
 # Cyberpunk 2077 Improved External Radio
-### based on [DrJackieBright's CP77-External-Radio-red4ext](https://github.com/DrJackieBright/CP77-External-Radio-red4ext/tree/master)
+### based on [DrJackieBright's CP77-External-Radio-red4ext](https://github.com/DrJackieBright/CP77-External-Radio-red4ext/)
 
 This mod is basically DrJackieBright's mod with more features.
 
@@ -55,7 +55,7 @@ Latest version of Cyberpunk 2077 (DLC not required)
 Not compatible with [DrJackieBright's CP77-External-Radio-red4ext](https://github.com/DrJackieBright/CP77-External-Radio-red4ext/) as I'm using his configuration.
 
 # Troubleshoot
-Make sure you update Visual C++ Redistributable on your system. [Link here](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+Make sure to update Visual C++ Redistributable on your system. [Link here](https://aka.ms/vs/17/release/vc_redist.x64.exe)
 
 # Big thanks to
 [DrJackieBright](https://github.com/DrJackieBright/CP77-External-Radio-red4ext/)'s CP77-External-Radio-red4ext for being an inspiration for me to create this mod in the first place.
@@ -69,4 +69,4 @@ Make sure you update Visual C++ Redistributable on your system. [Link here](http
 [maximegmd](https://github.com/maximegmd/)'s Cyber Engine Tweak
 
 # License
-See [License](https://github.com/Miiyuukii/CP2077.Improved.External.Radio/LICENSE.md) tab for more information.
+See [License](https://github.com/Miiyuukii/CP2077.Improved.External.Radio/blob/master/LICENSE.md) tab for more information.
