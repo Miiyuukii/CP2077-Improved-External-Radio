@@ -27,7 +27,7 @@ You can choose whether it behave like the old radio or the new one.
 
 ![native ui setting menu_pause_mute](images/modSettingBehCut.png)
 
-## Supported Applications (Not working.)
+## Supported Applications
 - Spotify
 - Google Chrome
 - Firefox
