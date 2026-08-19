@@ -25,7 +25,7 @@ You can choose whether it behave like the old radio or the new one.
 
 [picture here (native ui setting menu)]
 
-## Supported Applications
+## Supported Applications (Not working.)
 - Spotify
 - Google Chrome
 - Firefox
