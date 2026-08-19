@@ -425,8 +425,6 @@ void SetMediaVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame
     RED4ext::GetParameter(aFrame, &newVolume);
     aFrame->code++;
 
-    ::volume = newVolume;
-
     if (g_sdk && g_pluginHandle)
     {
         // g_sdk->logger->InfoF(g_pluginHandle, "Setting current media session volume to: %.2f", newVolume);
@@ -504,6 +502,14 @@ void GetVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, flo
         *aOut = ::volume;
     }
 }
+void SetVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, float* aOut, int64_t a4)
+{
+    float val;
+    RED4ext::GetParameter(aFrame, &val);
+    aFrame->code++;
+
+    ::volume = val;
+}
 
 struct ImpExRad : RED4ext::IScriptable
 {
@@ -527,10 +533,10 @@ RED4EXT_C_EXPORT void RED4EXT_CALL PostRegisterTypes()
     customClass.parent = scriptable;
 
     // Set Current Media Volume (0.0f to 1.0f)
-    auto setvolfunc = RED4ext::CClassFunction::Create(&customClass, "SetMediaVolume", "SetMediaVolume", &SetMediaVolume,
+    auto setmediavolfunc = RED4ext::CClassFunction::Create(&customClass, "SetMediaVolume", "SetMediaVolume", &SetMediaVolume,
                                                       {.isNative = true});
-    setvolfunc->AddParam("Float", "newVolume");
-    customClass.RegisterFunction(setvolfunc);
+    setmediavolfunc->AddParam("Float", "newVolume");
+    customClass.RegisterFunction(setmediavolfunc);
 
     // Set Mode
     auto setmodefunc =
@@ -599,6 +605,11 @@ RED4EXT_C_EXPORT void RED4EXT_CALL PostRegisterTypes()
         RED4ext::CClassFunction::Create(&customClass, "GetVolume", "GetVolume", &GetVolume, {.isNative = true});
     getvolfunc->SetReturnType("Float");
     customClass.RegisterFunction(getvolfunc);
+
+    auto setvolfunc =
+        RED4ext::CClassFunction::Create(&customClass, "SetVolume", "SetVolume", &SetVolume, {.isNative = true});
+    setvolfunc->AddParam("Float", "val");
+    customClass.RegisterFunction(setvolfunc);
 }
 
 RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4ext::v1::EMainReason aReason,

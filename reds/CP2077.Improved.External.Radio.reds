@@ -10,6 +10,7 @@ public native class ImpExRad extends IScriptable {
 
   public native func ResumeMedia() -> Void;
   public native func GetVolume() -> Float;
+  public native func SetVolume(newVolume: Float) -> Void;
 }
 
 @wrapMethod(RadioVolumeSettingsController)
@@ -25,6 +26,7 @@ private func ChangeValue(forward: Bool) -> Void {
 
   let bridge: ref<ImpExRad> = new ImpExRad();
   bridge.SetMediaVolume(targetVolume);
+  bridge.SetVolume(targetVolume);
 }
 
 @wrapMethod(PlayerPuppet)
