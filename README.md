@@ -46,6 +46,7 @@ You can choose whether it behave like the old radio or the new one.
 ![native ui setting menu_app](images/modSettingAppCut.png)
 
 # Requirements
+Only supported Windows (10/11)
 Latest version of Cyberpunk 2077 (DLC not required)
 
 # Installation
