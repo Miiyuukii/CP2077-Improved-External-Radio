@@ -415,6 +415,7 @@ void SetMediaVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame
     if (g_sdk && g_pluginHandle)
     {
         g_sdk->logger->InfoF(g_pluginHandle, "Setting current media session volume to: %.2f", newVolume);
+        g_sdk->logger->InfoF(g_pluginHandle, "Current media session volume is %.2f", ::volume);
     }
 
     SetCurrentMediaVolumeAsync(newVolume);
