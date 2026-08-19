@@ -56,7 +56,7 @@ registerForEvent("onInit", function()
             end
         end
     )
-
+--[[
     nativeSettings.addButton(
         "/ImpExRad/Devices",
         "Refresh Audio Devices",
@@ -67,6 +67,7 @@ registerForEvent("onInit", function()
             mod.bridge:ReloadDevices()
         end
     )
+    ]]--
 
     nativeSettings.addSubcategory("/ImpExRad/App", "App Options")
     local apps = {
