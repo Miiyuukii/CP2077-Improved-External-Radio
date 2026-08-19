@@ -88,7 +88,7 @@ C.
   - Combine both cuz why not :)
 
 # Compatibility
-Not compatible with [DrJackieBright's CP77-External-Radio-red4ext](https://github.com/DrJackieBright/CP77-External-Radio-red4ext/) as I'm using his configuration.
+Not compatible with [DrJackieBright's CP77-External-Radio-red4ext](https://github.com/DrJackieBright/CP77-External-Radio-red4ext/) as I'm using her configuration.
 
 # Troubleshoot
 Make sure to update Visual C++ Redistributable on your system. [Link here](https://aka.ms/vs/17/release/vc_redist.x64.exe)
