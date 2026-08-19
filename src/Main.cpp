@@ -18,6 +18,10 @@
 #include <winrt/Windows.Media.Control.h>
 #include <thread>
 
+// Target specific apps
+#include <psapi.h>
+#include <algorithm>
+
 static std::vector<std::string> devices = {};
 static std::vector<std::string> guids = {};
 
@@ -28,8 +32,13 @@ static int32_t mode = 0; // 0 = pause when out of car, 1 = mute when out of car,
 static bool useDevice = false;
 static bool useAppName = false;
 
-static std::vector<std::string> apps = {};
+static std::vector<std::string> apps = {
+    "Spotify.exe", "chrome.exe",   "firefox.exe",  "msedge.exe", "vlc.exe",   "foobar2000.exe", "AppleMusic.exe",
+    "TIDAL.exe",   "MusicBee.exe", "wmplayer.exe", "AIMP.exe",   "opera.exe", "brave.exe",      "Discord.exe"
+};
 static int32_t appIndex = 0;
+
+static float volume = 1.0;
 
 static RED4ext::v1::PluginHandle g_pluginHandle = nullptr;
 static const RED4ext::v1::Sdk* g_sdk = nullptr;
@@ -83,17 +92,18 @@ void ResumeMediaAsync()
         .detach();
 }
 
-void GetDevicesList(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, std::vector<std::string>* aOut, int64_t a4)
+void GetDevicesList(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame,
+                    RED4ext::DynArray<RED4ext::CString>* aOut, int64_t a4)
 {
     aFrame->code++;
 
     if (aOut)
     {
-        aOut->clear();
-        aOut->reserve(static_cast<uint32_t>(::devices.size()));
+        aOut->Clear();
+        aOut->Reserve(static_cast<uint32_t>(::devices.size()));
         for (const auto& dev : ::devices)
         {
-            aOut->push_back(dev.c_str());
+            aOut->PushBack(dev.c_str());
         }
     }
 }
@@ -207,55 +217,6 @@ void ReloadDevices(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame,
     aFrame->code++;
     ReloadDevicesInternal();
 }
-
-void SetDeviceVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
-{
-    float newVolume;
-    RED4ext::GetParameter(aFrame, &newVolume);
-    aFrame->code++;
-
-    // Set target device volume (currGuid) and change it volume to match ingame radio.
-    if (::currGuid.empty())
-        return;
-
-    if (newVolume < 0.0f)
-        newVolume = 0.0f;
-    if (newVolume > 1.0f)
-        newVolume = 1.0f;
-
-    HRESULT hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-    bool shouldUninit = SUCCEEDED(hrCo);
-
-    IMMDeviceEnumerator* pEnumerator = nullptr;
-    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
-                                  (void**)&pEnumerator);
-
-    if (SUCCEEDED(hr) && pEnumerator)
-    {
-        std::wstring wGuid = UTF8ToWide(::currGuid);
-        IMMDevice* pDevice = nullptr;
-
-        hr = pEnumerator->GetDevice(wGuid.c_str(), &pDevice);
-        if (SUCCEEDED(hr) && pDevice)
-        {
-            IAudioEndpointVolume* pEndpointVolume = nullptr;
-            hr = pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pEndpointVolume);
-
-            if (SUCCEEDED(hr) && pEndpointVolume)
-            {
-                pEndpointVolume->SetMasterVolumeLevelScalar(newVolume, NULL);
-                pEndpointVolume->Release();
-            }
-            pDevice->Release();
-        }
-        pEnumerator->Release();
-    }
-
-    if (shouldUninit)
-    {
-        CoUninitialize();
-    }
-}
 void SetDevice(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
 {
     RED4ext::CString newDevice;
@@ -273,77 +234,163 @@ void SetDevice(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, voi
     }
 }
 
+// Helper to retrieve the executable filename (e.g. "spotify.exe") from a process ID
+static std::string GetProcessNameFromPID(DWORD pid)
+{
+    if (pid == 0)
+        return "";
+
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProcess)
+        return "";
+
+    wchar_t buffer[MAX_PATH] = {0};
+    DWORD size = MAX_PATH;
+    std::string processName = "";
+
+    if (QueryFullProcessImageNameW(hProcess, 0, buffer, &size))
+    {
+        std::wstring fullPath(buffer);
+        size_t lastSlash = fullPath.find_last_of(L"\\/");
+        std::wstring fileName = (lastSlash != std::wstring::npos) ? fullPath.substr(lastSlash + 1) : fullPath;
+        processName = WideToUTF8(fileName.c_str());
+    }
+
+    CloseHandle(hProcess);
+    return processName;
+}
+// Case-insensitive string comparison helper
+static bool EqualsIgnoreCase(const std::string& a, const std::string& b)
+{
+    if (a.size() != b.size())
+        return false;
+    return std::equal(
+        a.begin(), a.end(), b.begin(), [](char ca, char cb)
+        { return std::tolower(static_cast<unsigned char>(ca)) == std::tolower(static_cast<unsigned char>(cb)); });
+}
 static void SetCurrentSessionVolumeInternal(float volumeLevel)
 {
-    HRESULT hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-    bool shouldUninit = SUCCEEDED(hrCo);
+    float clampedVol = (volumeLevel < 0.0f) ? 0.0f : ((volumeLevel > 1.0f) ? 1.0f : volumeLevel);
 
     try
     {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
-
-        auto manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
-        auto currentSession = manager.GetCurrentSession();
-
-        if (!currentSession)
         {
-            if (shouldUninit)
-                CoUninitialize();
-            return;
-        }
-
-        // Clamp volume level (0.0 to 1.0)
-        float clampedVol = (volumeLevel < 0.0f) ? 0.0f : ((volumeLevel > 1.0f) ? 1.0f : volumeLevel);
-
-        // Enumerate active audio sessions in WASAPI
-        IMMDeviceEnumerator* pEnumerator = nullptr;
-        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator)) && pEnumerator)
-        {
-            IMMDevice* pDevice = nullptr;
-            if (SUCCEEDED(pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice)) && pDevice)
+            IMMDeviceEnumerator* pEnumerator = nullptr;
+            if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+                                           __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator)) &&
+                pEnumerator)
             {
-                IAudioSessionManager2* pSessionManager = nullptr;
-                if (SUCCEEDED(pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, NULL,
-                                                (void**)&pSessionManager)) &&
-                    pSessionManager)
-                {
-                    IAudioSessionEnumerator* pSessionEnumerator = nullptr;
-                    if (SUCCEEDED(pSessionManager->GetSessionEnumerator(&pSessionEnumerator)) && pSessionEnumerator)
-                    {
-                        int count = 0;
-                        pSessionEnumerator->GetCount(&count);
+                IMMDevice* pDevice = nullptr;
+                HRESULT hrDevice = E_FAIL;
 
-                        // Loop through sessions and apply volume to non-system active media sessions
-                        for (int i = 0; i < count; i++)
-                        {
-                            IAudioSessionControl* pControl = nullptr;
-                            if (SUCCEEDED(pSessionEnumerator->GetSession(i, &pControl)) && pControl)
-                            {
-                                ISimpleAudioVolume* pVolume = nullptr;
-                                if (SUCCEEDED(pControl->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&pVolume)) &&pVolume)
-                                {
-                                    pVolume->SetMasterVolume(clampedVol, NULL);
-                                    pVolume->Release();
-                                }
-                                pControl->Release();
-                            }
-                        }
-                        pSessionEnumerator->Release();
-                    }
-                    pSessionManager->Release();
+                if (useDevice && !currGuid.empty())
+                {
+                    std::wstring wGuid = UTF8ToWide(currGuid);
+                    hrDevice = pEnumerator->GetDevice(wGuid.c_str(), &pDevice);
                 }
-                pDevice->Release();
+
+                if (FAILED(hrDevice) || !pDevice)
+                {
+                    hrDevice = pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice);
+                }
+
+                if (SUCCEEDED(hrDevice) && pDevice)
+                {
+                    IAudioSessionManager2* pSessionManager = nullptr;
+                    if (SUCCEEDED(pDevice->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, NULL,
+                                                    (void**)&pSessionManager)) &&
+                        pSessionManager)
+                    {
+                        IAudioSessionEnumerator* pSessionEnumerator = nullptr;
+                        if (SUCCEEDED(pSessionManager->GetSessionEnumerator(&pSessionEnumerator)) && pSessionEnumerator)
+                        {
+                            int count = 0;
+                            pSessionEnumerator->GetCount(&count);
+
+                            std::string targetApp = "";
+                            bool filterApp =
+                                useAppName && (appIndex >= 0 && appIndex < static_cast<int32_t>(apps.size()));
+                            if (filterApp)
+                            {
+                                targetApp = apps[appIndex];
+                            }
+
+                            for (int i = 0; i < count; i++)
+                            {
+                                IAudioSessionControl* pControl = nullptr;
+                                if (SUCCEEDED(pSessionEnumerator->GetSession(i, &pControl)) && pControl)
+                                {
+                                    bool shouldApplyVolume = true;
+
+                                    if (filterApp)
+                                    {
+                                        shouldApplyVolume = false;
+                                        IAudioSessionControl2* pControl2 = nullptr;
+
+                                        if (SUCCEEDED(pControl->QueryInterface(__uuidof(IAudioSessionControl2),
+                                                                               (void**)&pControl2)) &&
+                                            pControl2)
+                                        {
+                                            DWORD pid = 0;
+                                            pControl2->GetProcessId(&pid);
+
+                                            std::string procName = GetProcessNameFromPID(pid);
+
+                                            if (!procName.empty() && (EqualsIgnoreCase(procName, targetApp) ||
+                                                                      procName.find(targetApp) != std::string::npos))
+                                            {
+                                                shouldApplyVolume = true;
+                                            }
+                                            else
+                                            {
+                                                LPWSTR pwszDisplayName = nullptr;
+                                                if (SUCCEEDED(pControl2->GetDisplayName(&pwszDisplayName)) &&
+                                                    pwszDisplayName)
+                                                {
+                                                    std::string dispName = WideToUTF8(pwszDisplayName);
+                                                    CoTaskMemFree(pwszDisplayName);
+
+                                                    if (EqualsIgnoreCase(dispName, targetApp) ||
+                                                        dispName.find(targetApp) != std::string::npos)
+                                                    {
+                                                        shouldApplyVolume = true;
+                                                    }
+                                                }
+                                            }
+
+                                            pControl2->Release();
+                                        }
+                                    }
+
+                                    if (shouldApplyVolume)
+                                    {
+                                        ISimpleAudioVolume* pVolume = nullptr;
+                                        if (SUCCEEDED(pControl->QueryInterface(__uuidof(ISimpleAudioVolume),
+                                                                               (void**)&pVolume)) &&
+                                            pVolume)
+                                        {
+                                            pVolume->SetMasterVolume(clampedVol, NULL);
+                                            pVolume->Release();
+                                        }
+                                    }
+
+                                    pControl->Release();
+                                }
+                            }
+                            pSessionEnumerator->Release();
+                        }
+                        pSessionManager->Release();
+                    }
+                    pDevice->Release();
+                }
+                pEnumerator->Release();
             }
-            pEnumerator->Release();
         }
+        winrt::uninit_apartment();
     }
     catch (...)
     {
-    }
-
-    if (shouldUninit)
-    {
-        CoUninitialize();
     }
 }
 
@@ -357,6 +404,8 @@ void SetMediaVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame
     float newVolume;
     RED4ext::GetParameter(aFrame, &newVolume);
     aFrame->code++;
+
+    ::volume = newVolume;
 
     if (g_sdk && g_pluginHandle)
     {
@@ -422,6 +471,23 @@ void GetAppIndex(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, i
         *aOut = ::appIndex;
     }
 }
+void SetAppIndex(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
+{
+    int32_t val;
+    RED4ext::GetParameter(aFrame, &val);
+    aFrame->code++;
+
+    ::appIndex = val;
+}
+
+void GetVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, float* aOut, int64_t a4)
+{
+    aFrame->code++;
+    if (aOut)
+    {
+        *aOut = ::volume;
+    }
+}
 
 struct ImpExRad : RED4ext::IScriptable
 {
@@ -473,7 +539,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL PostRegisterTypes()
     customClass.RegisterFunction(resumefunc);
 
     // Reload device function
-    auto relfunc = RED4ext::CClassFunction::Create(&customClass, "ReloadDevice", "ReloadDevice", &ReloadDevices,
+    auto relfunc = RED4ext::CClassFunction::Create(&customClass, "ReloadDevices", "ReloadDevices", &ReloadDevices,
                                                    {.isNative = true});
     customClass.RegisterFunction(relfunc);
 
@@ -505,6 +571,18 @@ RED4EXT_C_EXPORT void RED4EXT_CALL PostRegisterTypes()
     auto getappfunc = RED4ext::CClassFunction::Create(&customClass, "GetAppIndex", "GetAppIndex", &GetAppIndex, {.isNative = true});
     getappfunc->SetReturnType("Int32");
     customClass.RegisterFunction(getappfunc);
+
+    // Set Index App
+    auto setappfunc =
+        RED4ext::CClassFunction::Create(&customClass, "SetAppIndex", "SetAppIndex", &SetAppIndex, {.isNative = true});
+    setappfunc->AddParam("Int32", "val");
+    customClass.RegisterFunction(setappfunc);
+
+    // Get Volume
+    auto getvolfunc =
+        RED4ext::CClassFunction::Create(&customClass, "GetVolume", "GetVolume", &GetVolume, {.isNative = true});
+    getvolfunc->SetReturnType("Float");
+    customClass.RegisterFunction(getvolfunc);
 }
 
 RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4ext::v1::EMainReason aReason,

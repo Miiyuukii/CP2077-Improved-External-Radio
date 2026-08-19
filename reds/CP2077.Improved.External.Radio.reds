@@ -9,6 +9,7 @@ public native class ImpExRad extends IScriptable {
   public native func PauseMedia() -> Void;
 
   public native func ResumeMedia() -> Void;
+  public native func GetVolume() -> Float;
 }
 
 @wrapMethod(RadioVolumeSettingsController)
@@ -37,13 +38,7 @@ private cb func OnMountingEvent(evt: ref<MountingEvent>) -> Bool {
     let bridge: ref<ImpExRad> = new ImpExRad();
     let currentMode: Int32 = bridge.GetMode();
 
-    let settingsSystem: ref<UserSettings> = GameInstance.GetSettingsSystem(this.GetGame());
-    let radioVolumeVar: ref<ConfigVarFloat> = settingsSystem.GetVar(n"/audio/volume", n"Radio") as ConfigVarFloat;
-    let targetVolume: Float = 1.0;
-
-    if IsDefined(radioVolumeVar) {
-      targetVolume = radioVolumeVar.GetValue() / 100.0;
-    }
+    let targetVolume: Float = bridge.GetVolume();
 
     switch currentMode {
       case 0:

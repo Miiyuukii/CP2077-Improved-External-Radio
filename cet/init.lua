@@ -11,16 +11,13 @@ registerForEvent("onInit", function()
     end
 
     nativeSettings.addTab("/ImpExRad", "CP2077 Improved External Radio")
-    -- Instantiate the RTTI class registered by your RED4ext DLL
     mod.bridge = ImpExRad.new()
 
     nativeSettings.addSubcategory("/ImpExRad/Devices", "Device Options")
 
-    -- Fetch devices list safely
     local rawDevices = mod.bridge:GetDevicesList() or {}
     local devicesList = {}
 
-    -- Ensure array has valid, non-empty string elements
     for _, dev in ipairs(rawDevices) do
         if dev and dev ~= "" then
             table.insert(devicesList, dev)
@@ -42,16 +39,14 @@ registerForEvent("onInit", function()
         end
     )
 
-    -- Add Device Selector Dropdown
     nativeSettings.addSelectorString(
         "/ImpExRad/Devices",
         "Target Audio Device",
         "Select the Windows playback device used for external audio.",
         devicesList,
-        1, -- Default selection
-        1, -- Current selection
+        1,
+        1,
         function(selectedValue)
-            -- Handles both Index (int) or Direct String passing depending on Native Settings version
             if type(selectedValue) == "number" then
                 if devicesList[selectedValue] then
                     mod.bridge:SetDevice(devicesList[selectedValue])
@@ -62,7 +57,6 @@ registerForEvent("onInit", function()
         end
     )
 
-    -- Refresh Devices Button
     nativeSettings.addButton(
         "/ImpExRad/Devices",
         "Refresh Audio Devices",
@@ -75,7 +69,34 @@ registerForEvent("onInit", function()
     )
 
     nativeSettings.addSubcategory("/ImpExRad/App", "App Settings")
-    local apps = {}
+    local apps = {
+        [1] = "Spotify",
+        [2] = "Google Chrome",
+        [3] = "Firefox",
+        [4] = "Microsoft Edge",
+        [5] = "VLC media player",
+        [6] = "foobar2000",
+        [7] = "Apple Music",
+        [8] = "Tidal",
+        [9] = "MusicBee",
+        [10] = "Windows Media Player",
+        [11] = "AIMP",
+        [12] = "Opera",
+        [13] = "Brave",
+        [14] = "Discord"
+    }
+
+    nativeSettings.addSwitch(
+        "/ImpExRad/App",
+        "Use specific app",
+        "Mute specific app app volume.",
+        false,
+        false,
+        function(state)
+            mod.bridge:SetUseApp(state)
+        end
+    )
+
     local initialApp = mod.bridge:GetAppIndex() or 0
     local currentAppIndex = math.min(math.max(initialApp + 1, 1), #apps)
     nativeSettings.addSelectorString(
@@ -86,8 +107,17 @@ registerForEvent("onInit", function()
         1,               -- Default index
         currentAppIndex, -- Initial active index
         function(idx)
-            local appValue = (type(idx) == "number" and idx or currentAppIndex) - 1
-            mod.bridge:Set(appValue)
+            local targetIdx = currentAppIndex
+            if type(idx) == "number" then
+                targetIdx = idx
+            elseif type(idx) == "string" then
+                for i, name in ipairs(apps) do
+                    if name == idx then
+                        targetIdx = i
+                        break
+                    end
+                end
+            end
         end
     )
 
