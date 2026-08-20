@@ -62,7 +62,7 @@ $\color{#ff0000}{\text{Be careful!}}$
 
 
 # Installation
-1. Install [redscript](https://www.nexusmods.com/cyberpunk2077/mods/1511), [RED4ext](https://www.nexusmods.com/cyberpunk2077/mods/2380), [Cyber Engine Tweaks](https://www.nexusmods.com/cyberpunk2077/mods/107), [Native Setting UI](https://www.nexusmods.com/cyberpunk2077/mods/3518).
+1. Install [redscript](https://www.nexusmods.com/cyberpunk2077/mods/1511), [RED4ext](https://www.nexusmods.com/cyberpunk2077/mods/2380), [Cyber Engine Tweaks](https://www.nexusmods.com/cyberpunk2077/mods/107), [Native Setting UI](https://www.nexusmods.com/cyberpunk2077/mods/3518), [TweakXL](https://www.nexusmods.com/cyberpunk2077/mods/4197).
 2. Unzip the file into your game directory or use Vortex to install.
 3. Configure it in "Mods/CP2077 Improved External Radio".
 
@@ -92,6 +92,8 @@ C.
 
 # Compatibility
 Not compatible with [DrJackieBright's CP77-External-Radio-red4ext](https://github.com/DrJackieBright/CP77-External-Radio-red4ext/) as I'm using her configuration.
+
+Compatible with [Always My Radio Station](https://www.nexusmods.com/cyberpunk2077/mods/16767) (might have duplicate entry but should be working normally)
 
 # Big thanks to
 [DrJackieBright](https://github.com/DrJackieBright/CP77-External-Radio-red4ext/)'s CP77-External-Radio-red4ext for being an inspiration for me to create this mod in the first place.
