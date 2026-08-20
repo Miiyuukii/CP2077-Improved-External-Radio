@@ -9,7 +9,9 @@ public native class ImpExRad extends IScriptable {
   public native func PauseMedia() -> Void;
 
   public native func ResumeMedia() -> Void;
+
   public native func GetVolume() -> Float;
+
   public native func SetVolume(newVolume: Float) -> Void;
 }
 
@@ -137,3 +139,12 @@ public final static func GetRadioStations(player: ref<GameObject>) -> array<ref<
   return res;
 }
 
+/*/
+// Pocket radio support
+// Pause/Resume media when certain conditions met
+//
+// Pocket Radio
+// PlayerPuppet -> IsJohnnySicknessBreathingEffectActive
+// PlayerPuppet -> OnDead
+// PlayerPuppet -> OnResurrected?
+/*/
