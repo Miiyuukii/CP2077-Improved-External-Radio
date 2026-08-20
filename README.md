@@ -62,7 +62,7 @@ $\color{#ff0000}{\text{Be careful!}}$
 
 
 # Installation
-1. Install [redscript](https://www.nexusmods.com/cyberpunk2077/mods/1511), [RED4ext](https://www.nexusmods.com/cyberpunk2077/mods/2380), [Cyber Engine Tweaks](https://www.nexusmods.com/cyberpunk2077/mods/107), [Native Setting UI](https://www.nexusmods.com/cyberpunk2077/mods/3518).
+1. Install [redscript](https://www.nexusmods.com/cyberpunk2077/mods/1511), [RED4ext](https://www.nexusmods.com/cyberpunk2077/mods/2380), [Cyber Engine Tweaks](https://www.nexusmods.com/cyberpunk2077/mods/107), [Native Setting UI](https://www.nexusmods.com/cyberpunk2077/mods/3518), [TweakXL](https://www.nexusmods.com/cyberpunk2077/mods/4197).
 2. Unzip the file into your game directory or use Vortex to install.
 3. Configure it in "Mods/CP2077 Improved External Radio".
 
