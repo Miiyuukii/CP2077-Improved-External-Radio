@@ -3,6 +3,42 @@ mod = {
     bridge = nil
 }
 
+modSettings = {
+    useDevice = false,
+    deviceIndex = 1,
+    useApp = false,
+    appIndex = 1,
+    behaviorMode = 1,
+}
+
+function SaveSettings()
+    local f = io.open("settings.json", "w")
+    if f then
+        local ms = json.encode(modSettings)
+        f:write(ms)
+        f:close()
+    end
+end
+
+function LoadSettings()
+    if SettingsExist() then
+        local f = io.open("settings.json", "r")
+        if f then
+            modSettings = json.decode(f:read("*a"))
+            f:close()
+        end
+    end
+end
+
+function SettingsExist()
+    local f = io.open("settings.json", "r")
+    if f then
+        f:close()
+        return true
+    end
+    return false
+end
+
 registerForEvent("onInit", function()
     local nativeSettings = GetMod("nativeSettings")
     if not nativeSettings then
@@ -12,6 +48,10 @@ registerForEvent("onInit", function()
 
     nativeSettings.addTab("/ImpExRad", "CP2077 Improved External Radio")
     mod.bridge = ImpExRad.new()
+
+    if SettingsExist() then
+        LoadSettings()
+    end
 
     nativeSettings.addSubcategory("/ImpExRad/Devices", "Device Options")
 
@@ -32,31 +72,34 @@ registerForEvent("onInit", function()
         "/ImpExRad/Devices",
         "Use specific devices",
         "Mute specific devices app volume.",
-        false,
+        modSettings.useDevice,
         false,
         function(state)
             mod.bridge:SetUseDevice(state)
+            modSettings.useDevice = state
+            SaveSettings()
         end
     )
+
+    local dIndex = 1;
+    if #devicesList >= modSettings.deviceIndex then
+        dIndex = modSettings.deviceIndex
+    end
 
     nativeSettings.addSelectorString(
         "/ImpExRad/Devices",
         "Target Audio Device",
         "Select the Windows playback device used for external audio.",
         devicesList,
-        1,
+        dIndex,
         1,
         function(selectedValue)
-            if type(selectedValue) == "number" then
-                if devicesList[selectedValue] then
-                    mod.bridge:SetDevice(devicesList[selectedValue])
-                end
-            elseif type(selectedValue) == "string" then
-                mod.bridge:SetDevice(selectedValue)
-            end
+            mod.bridge:SetDevice(devicesList[selectedValue])
+            modSettings.deviceIndex = selectedValue
+            SaveSettings()
         end
     )
---[[
+    --[[
     nativeSettings.addButton(
         "/ImpExRad/Devices",
         "Refresh Audio Devices",
@@ -67,7 +110,7 @@ registerForEvent("onInit", function()
             mod.bridge:ReloadDevices()
         end
     )
-    ]]--
+        ]] --
 
     nativeSettings.addSubcategory("/ImpExRad/App", "App Options")
     local apps = {
@@ -91,35 +134,30 @@ registerForEvent("onInit", function()
         "/ImpExRad/App",
         "Use specific app",
         "Mute specific app app volume.",
-        false,
+        modSettings.useApp,
         false,
         function(state)
             mod.bridge:SetUseApp(state)
+            modSettings.useApp = state;
+            SaveSettings()
         end
     )
 
-    local initialApp = mod.bridge:GetAppIndex() or 0
-    local currentAppIndex = math.min(math.max(initialApp + 1, 1), #apps)
+    local aIndex = 1;
+    if #apps >= modSettings.appIndex then
+        aIndex = modSettings.appIndex
+    end
     nativeSettings.addSelectorString(
         "/ImpExRad/App",
         "Applications",
         "Choose which applications will be affected by behavior.",
         apps,
+        aIndex,
         1,
-        currentAppIndex,
         function(idx)
-            local targetIdx = currentAppIndex
-            if type(idx) == "number" then
-                targetIdx = idx
-            elseif type(idx) == "string" then
-                for i, name in ipairs(apps) do
-                    if name == idx then
-                        targetIdx = i
-                        break
-                    end
-                end
-            end
-            mod.bridge:SetAppIndex(targetIdx - 1)
+            mod.bridge:SetAppIndex(idx - 1)
+            modSettings.appIndex = idx
+            SaveSettings()
         end
     )
 
@@ -131,19 +169,17 @@ registerForEvent("onInit", function()
         [3] = "Disabled (Do Nothing)"
     }
 
-    local initialMode = mod.bridge:GetMode() or 0
-    local currentModeIndex = math.min(math.max(initialMode + 1, 1), #modes)
-
     nativeSettings.addSelectorString(
         "/ImpExRad/Behavior",
         "Behavior Mode",
         "Choose how external audio behaves when exiting or entering a vehicle.",
         modes,
+        modSettings.behaviorMode,
         1,
-        currentModeIndex,
         function(idx)
-            local modeValue = (type(idx) == "number" and idx or currentModeIndex) - 1
-            mod.bridge:SetMode(modeValue)
+            mod.bridge:SetMode(idx - 1)
+            modSettings.behaviorMode = idx
+            SaveSettings()
         end
     )
 

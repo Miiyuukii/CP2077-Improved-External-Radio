@@ -140,11 +140,15 @@ public final static func GetRadioStations(player: ref<GameObject>) -> array<ref<
 }
 
 /*/
-// Pocket radio support
-// Pause/Resume media when certain conditions met
+// > Pocket radio support
+// > disable environmental music
+// > Pause/Resume media when certain conditions met
+// > Press Z to Pause/Resume while on foot
 //
 // Pocket Radio
 // PlayerPuppet -> IsJohnnySicknessBreathingEffectActive
 // PlayerPuppet -> OnDead
 // PlayerPuppet -> OnResurrected?
+//
+//
 /*/
