@@ -66,6 +66,9 @@ $\color{#ff0000}{\text{Be careful!}}$
 2. Unzip the file into your game directory or use Vortex to install.
 3. Configure it in "Mods/CP2077 Improved External Radio".
 
+# Troubleshoot
+Make sure to update Visual C++ Redistributable on your system. [Link here](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+
 # Recommendation
 This is my personal recommendation. 
 
@@ -89,9 +92,6 @@ C.
 
 # Compatibility
 Not compatible with [DrJackieBright's CP77-External-Radio-red4ext](https://github.com/DrJackieBright/CP77-External-Radio-red4ext/) as I'm using her configuration.
-
-# Troubleshoot
-Make sure to update Visual C++ Redistributable on your system. [Link here](https://aka.ms/vs/17/release/vc_redist.x64.exe)
 
 # Big thanks to
 [DrJackieBright](https://github.com/DrJackieBright/CP77-External-Radio-red4ext/)'s CP77-External-Radio-red4ext for being an inspiration for me to create this mod in the first place.
