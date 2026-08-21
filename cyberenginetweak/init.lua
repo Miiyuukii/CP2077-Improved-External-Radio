@@ -1,6 +1,7 @@
 mod = {
     ready = false,
-    bridge = nil
+    bridge = nil,
+    devicesList = {}
 }
 
 modSettings = {
@@ -39,6 +40,14 @@ function SettingsExist()
     return false
 end
 
+function ApplySaveSettings()
+    mod.bridge:SetUseDevice(modSettings.useDevice)
+    mod.bridge:SetDevice(mod.devicesList[modSettings.deviceIndex])
+    mod.bridge:SetUseApp(modSettings.useApp)
+    mod.bridge:SetAppIndex(modSettings.appIndex - 1)
+    mod.bridge:SetMode(modSettings.behaviorMode - 1)
+end
+
 registerForEvent("onInit", function()
     local nativeSettings = GetMod("nativeSettings")
     if not nativeSettings then
@@ -56,16 +65,16 @@ registerForEvent("onInit", function()
     nativeSettings.addSubcategory("/ImpExRad/Devices", "Device Options")
 
     local rawDevices = mod.bridge:GetDevicesList() or {}
-    local devicesList = {}
+    mod.devicesList = {}
 
     for _, dev in ipairs(rawDevices) do
         if dev and dev ~= "" then
-            table.insert(devicesList, dev)
+            table.insert(mod.devicesList, dev)
         end
     end
 
-    if #devicesList == 0 then
-        devicesList = { "No Devices Found" }
+    if #mod.devicesList == 0 then
+        mod.devicesList = { "No Devices Found" }
     end
 
     nativeSettings.addSwitch(
@@ -82,7 +91,7 @@ registerForEvent("onInit", function()
     )
 
     local dIndex = 1;
-    if #devicesList >= modSettings.deviceIndex then
+    if #mod.devicesList >= modSettings.deviceIndex then
         dIndex = modSettings.deviceIndex
     end
 
@@ -90,11 +99,11 @@ registerForEvent("onInit", function()
         "/ImpExRad/Devices",
         "Target Audio Device",
         "Select the Windows playback device used for external audio.",
-        devicesList,
+        mod.devicesList,
         dIndex,
         1,
         function(selectedValue)
-            mod.bridge:SetDevice(devicesList[selectedValue])
+            mod.bridge:SetDevice(mod.devicesList[selectedValue])
             modSettings.deviceIndex = selectedValue
             SaveSettings()
         end
@@ -182,6 +191,10 @@ registerForEvent("onInit", function()
             SaveSettings()
         end
     )
+
+    if SettingsExist() then
+        ApplySaveSettings()
+    end
 
     mod.ready = true
 end)
