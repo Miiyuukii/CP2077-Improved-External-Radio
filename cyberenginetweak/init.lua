@@ -10,6 +10,8 @@ modSettings = {
     useApp = false,
     appIndex = 1,
     behaviorMode = 1,
+    useFadeIn = false,
+    useFadeOut = false
 }
 
 function SaveSettings()
@@ -46,6 +48,8 @@ function ApplySaveSettings()
     mod.bridge:SetUseApp(modSettings.useApp)
     mod.bridge:SetAppIndex(modSettings.appIndex - 1)
     mod.bridge:SetMode(modSettings.behaviorMode - 1)
+    mod.bridge:SetFadeIn(modSettings.useFadeIn)
+    mod.bridge:SetFadeOut(modSettings.useFadeOut)
 end
 
 registerForEvent("onInit", function()
@@ -188,6 +192,32 @@ registerForEvent("onInit", function()
         function(idx)
             mod.bridge:SetMode(idx - 1)
             modSettings.behaviorMode = idx
+            SaveSettings()
+        end
+    )
+
+    nativeSettings.addSwitch(
+        "/ImpExRad/Behavior",
+        "Use fade in",
+        "Fade the volume in when entering vehicle",
+        modSettings.useFadeIn,
+        true,
+        function(state)
+            mod.bridge:SetFadeIn(state)
+            modSettings.useFadeIn = state;
+            SaveSettings()
+        end
+    )
+
+    nativeSettings.addSwitch(
+        "/ImpExRad/Behavior",
+        "Use fade out",
+        "Fade the volume out when exiting vehicle",
+        modSettings.useFadeOut,
+        true,
+        function(state)
+            mod.bridge:SetFadeOut(state)
+            modSettings.useFadeOut = state;
             SaveSettings()
         end
     )

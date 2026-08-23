@@ -31,6 +31,9 @@ static int32_t mode = 0; // 0 = pause when out of car, 1 = mute when out of car,
 
 static bool useDevice = false;
 static bool useAppName = false;
+static bool useFadeIn = false;
+static bool useFadeOut = false;
+static bool pauseAfterTime = false;
 
 static std::vector<std::string> apps = {
     "Spotify.exe", "chrome.exe",   "firefox.exe",  "msedge.exe", "vlc.exe",   "foobar2000.exe", "AppleMusic.exe",
@@ -39,6 +42,8 @@ static std::vector<std::string> apps = {
 static int32_t appIndex = 0;
 
 static float volume = 1.0;
+
+static int32_t timeIndex = 0; // 0 = 1 min, 1 = 5 min, 2 = 10 min
 
 static RED4ext::v1::PluginHandle g_pluginHandle = nullptr;
 static const RED4ext::v1::Sdk* g_sdk = nullptr;
@@ -511,6 +516,37 @@ void SetVolume(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, flo
     ::volume = val;
 }
 
+void SetFadeIn(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
+{
+    bool val;
+    RED4ext::GetParameter(aFrame, &val);
+    aFrame->code++;
+
+    ::useFadeIn = val;
+}
+void SetFadeOut(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, void* aOut, int64_t a4)
+{
+    bool val;
+    RED4ext::GetParameter(aFrame, &val);
+    aFrame->code++;
+
+    ::useFadeOut = val;
+}
+void GetFadeIn(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t a4)
+{
+    if (aOut)
+    {
+        *aOut = ::useFadeIn;
+    }
+}
+void GetFadeOut(RED4ext::IScriptable* aContext, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t a4)
+{
+    if (aOut)
+    {
+        *aOut = ::useFadeOut;
+    }
+}
+
 struct ImpExRad : RED4ext::IScriptable
 {
     RED4ext::CClass* GetNativeType();
@@ -606,10 +642,35 @@ RED4EXT_C_EXPORT void RED4EXT_CALL PostRegisterTypes()
     getvolfunc->SetReturnType("Float");
     customClass.RegisterFunction(getvolfunc);
 
+    // Set Volume
     auto setvolfunc =
         RED4ext::CClassFunction::Create(&customClass, "SetVolume", "SetVolume", &SetVolume, {.isNative = true});
     setvolfunc->AddParam("Float", "val");
     customClass.RegisterFunction(setvolfunc);
+
+    // Set fade in
+    auto setfadeinfunc =
+        RED4ext::CClassFunction::Create(&customClass, "SetFadeIn", "SetFadeIn", &SetFadeIn, {.isNative = true});
+    setfadeinfunc->AddParam("Bool", "val");
+    customClass.RegisterFunction(setfadeinfunc);
+
+    // Set fade out
+    auto setfadeoutfunc =
+        RED4ext::CClassFunction::Create(&customClass, "SetFadeOut", "SetFadeOut", &SetFadeOut, {.isNative = true});
+    setfadeoutfunc->AddParam("Bool", "val");
+    customClass.RegisterFunction(setfadeoutfunc);
+
+    // Get fade in
+    auto getfadeinfunc =
+        RED4ext::CClassFunction::Create(&customClass, "GetFadeIn", "GetFadeIn", &GetFadeIn, {.isNative = true});
+    getfadeinfunc->SetReturnType("Bool");
+    customClass.RegisterFunction(getfadeinfunc);
+
+    // Get fade out
+    auto getfadeoutfunc =
+        RED4ext::CClassFunction::Create(&customClass, "GetFadeOut", "GetFadeOut", &GetFadeOut, {.isNative = true});
+    getfadeoutfunc->SetReturnType("Bool");
+    customClass.RegisterFunction(getfadeoutfunc);
 }
 
 RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4ext::v1::EMainReason aReason,
@@ -625,7 +686,7 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle aHandle, RED4e
 
         rtti->AddRegisterCallback(RegisterTypes);
         rtti->AddPostRegisterCallback(PostRegisterTypes);
-
+ 
         // g_sdk->logger->Info(g_pluginHandle, "Loaded successfully!");
 
         ReloadDevicesInternal();

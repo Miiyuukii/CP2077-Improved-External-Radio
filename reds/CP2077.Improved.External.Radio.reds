@@ -13,6 +13,46 @@ public native class ImpExRad extends IScriptable {
   public native func GetVolume() -> Float;
 
   public native func SetVolume(newVolume: Float) -> Void;
+
+  public native func GetFadeIn() -> Bool;
+
+  public native func GetFadeOut() -> Bool;
+}
+
+public class DelayCallbackVolume extends DelayCallback {
+  private let volume: Float;
+
+  public func Call() {
+    let bridge: ref<ImpExRad> = new ImpExRad();
+    bridge.SetMediaVolume(this.volume);
+  }
+
+  public static func Create(vol: Float) -> ref<DelayCallbackVolume> {
+    let self = new DelayCallbackVolume();
+
+    self.volume = vol;
+    return self;
+  }
+}
+
+public class DelayCallbackMedia extends DelayCallback {
+  private let pause: Bool;
+
+  public func Call() {
+    let bridge: ref<ImpExRad> = new ImpExRad();
+    if this.pause {
+      bridge.PauseMedia();
+    } else {
+      bridge.ResumeMedia();
+    }
+  }
+
+  public static func Create(pause: Bool) -> ref<DelayCallbackMedia> {
+    let self = new DelayCallbackMedia();
+
+    self.pause = pause;
+    return self;
+  }
 }
 
 @wrapMethod(RadioVolumeSettingsController)
@@ -44,15 +84,40 @@ private cb func OnMountingEvent(evt: ref<MountingEvent>) -> Bool {
 
     let targetVolume: Float = bridge.GetVolume();
 
+    let useFadeIn = bridge.GetFadeIn();
+
+    if useFadeIn {
+      let vol1 = targetVolume * 0.2;
+      let delay1 = 0.2;
+      let vol2 = targetVolume * 0.4;
+      let delay2 = 0.4;
+      let vol3 = targetVolume * 0.6;
+      let delay3 = 0.6;
+      let vol4 = targetVolume * 0.8;
+      let delay4 = 0.8;
+      let vol5 = targetVolume;
+      let delay5 = 1.0;
+
+      let delaySystem = GameInstance.GetDelaySystem(GetGameInstance());
+      delaySystem.DelayCallback(DelayCallbackVolume.Create(vol1), delay1, false);
+      delaySystem.DelayCallback(DelayCallbackVolume.Create(vol2), delay2, false);
+      delaySystem.DelayCallback(DelayCallbackVolume.Create(vol3), delay3, false);
+      delaySystem.DelayCallback(DelayCallbackVolume.Create(vol4), delay4, false);
+      delaySystem.DelayCallback(DelayCallbackVolume.Create(vol5), delay5, false);
+    }
     switch currentMode {
       case 0:
         // Resume / Unmute on enter
-        bridge.SetMediaVolume(targetVolume);
+        if !useFadeIn {
+          bridge.SetMediaVolume(targetVolume);
+        }
         bridge.ResumeMedia();
         break;
       case 1:
         // Restore device volume on enter
-        bridge.SetMediaVolume(targetVolume);
+        if !useFadeIn {
+          bridge.SetMediaVolume(targetVolume);
+        }
         break;
       case 2:
         // Don't do anything
@@ -73,15 +138,42 @@ private cb func OnUnmountingEvent(evt: ref<UnmountingEvent>) -> Bool {
     let bridge: ref<ImpExRad> = new ImpExRad();
     let currentMode: Int32 = bridge.GetMode();
 
+    let targetVolume: Float = bridge.GetVolume();
+
+    let useFadeOut = bridge.GetFadeOut();
+    if useFadeOut {
+      let vol1 = targetVolume * 0.8;
+      let delay1 = 0.1;
+      let vol2 = targetVolume * 0.6;
+      let delay2 = 0.2;
+      let vol3 = targetVolume * 0.4;
+      let delay3 = 0.3;
+      let vol4 = targetVolume * 0.2;
+      let delay4 = 0.4;
+      let vol5 = 0.0;
+      let delay5 = 0.5;
+
+      let delaySystem = GameInstance.GetDelaySystem(GetGameInstance());
+      delaySystem.DelayCallback(DelayCallbackVolume.Create(vol1), delay1, false);
+      delaySystem.DelayCallback(DelayCallbackVolume.Create(vol2), delay2, false);
+      delaySystem.DelayCallback(DelayCallbackVolume.Create(vol3), delay3, false);
+      delaySystem.DelayCallback(DelayCallbackVolume.Create(vol4), delay4, false);
+      delaySystem.DelayCallback(DelayCallbackVolume.Create(vol5), delay5, false);
+    }
+
     switch currentMode {
       case 0:
         // Pause / Mute on exit
-        bridge.SetMediaVolume(0.0);
+        if !useFadeOut {
+          bridge.SetMediaVolume(0.0);
+        }
         bridge.PauseMedia();
         break;
       case 1:
         // Mute on exit
-        bridge.SetMediaVolume(0.0);
+        if !useFadeOut {
+          bridge.SetMediaVolume(0.0);
+        }
         break;
       case 2:
         // Don't do anything
@@ -139,7 +231,7 @@ public final static func GetRadioStations(player: ref<GameObject>) -> array<ref<
   return res;
 }
 
-/*/
+/**
 // > Pocket radio support
 // > disable environmental music
 // > Pause/Resume media when certain conditions met
@@ -151,4 +243,4 @@ public final static func GetRadioStations(player: ref<GameObject>) -> array<ref<
 // PlayerPuppet -> OnResurrected?
 //
 //
-/*/
+*/
