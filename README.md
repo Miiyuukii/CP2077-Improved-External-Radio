@@ -25,6 +25,9 @@ You can choose whether it behaves.
 - Mute on unmount from vehicles.
 - Do nothing
 
+## Fade In/Fade Out
+*Fade out only works on "mute on exit".
+
 ![native ui setting menu_pause_mute](images/modSettingBehCut.png)
 
 ## Supported Applications
