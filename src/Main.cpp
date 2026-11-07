@@ -711,7 +711,7 @@ RED4EXT_C_EXPORT void RED4EXT_CALL Query(RED4ext::v1::PluginInfo* aInfo)
 {
     aInfo->name = L"CP2077.Improved.External.Radio";
     aInfo->author = L"unstblr";
-    aInfo->version = RED4EXT_V1_SEMVER(1, 0, 0);
+    aInfo->version = RED4EXT_V1_SEMVER(1, 3, 0);
     aInfo->runtime = RED4EXT_V1_RUNTIME_VERSION_LATEST;
     aInfo->sdk = RED4EXT_V1_SDK_VERSION_CURRENT;
 }
